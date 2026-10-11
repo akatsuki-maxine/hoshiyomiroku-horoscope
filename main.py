@@ -966,11 +966,17 @@ def build_chart_download_page(
             const transparentSvgUrl =
                 "data:image/svg+xml;base64,{encoded_transparent_svg}";
 
-            chartImage.addEventListener("load", () => {{
+            // data: SVG は script 実行より先に読み込み済みになることがある。
+            // load イベントの取り逃がしを防ぐため、既存の読み込み状態も確認する。
+            function enableDownloadWhenReady() {{
+                if (!chartImage.complete || chartImage.naturalWidth === 0) return;
                 downloadButton.disabled = false;
                 statusText.textContent =
                     "準備完了です。細かな文字には「高精細 8000px」を推奨します。";
-            }});
+            }}
+
+            chartImage.addEventListener("load", enableDownloadWhenReady);
+            enableDownloadWhenReady();
 
             chartImage.addEventListener("error", () => {{
                 statusText.textContent = "ホロスコープ画像を読み込めませんでした。";

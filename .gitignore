@@ -28,3 +28,8 @@ requirements-local.txt
 private/
 exports/
 charts/
+
+# Offline GeoNames build artifacts (generated during Docker build)
+data/
+*.sqlite3
+*.sqlite3-*

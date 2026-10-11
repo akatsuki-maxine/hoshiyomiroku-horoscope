@@ -7,3 +7,8 @@ __pycache__/
 requirements-local.txt
 main.py.backup
 .git/
+
+# Offline GeoNames build artifacts (generated during Docker build)
+data/
+*.sqlite3
+*.sqlite3-*

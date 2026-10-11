@@ -4,7 +4,7 @@
 
 ## ライセンスと重要事項
 
-このリポジトリの生成機プログラムには GNU Affero General Public License version 3.0 (AGPL-3.0) を適用する予定です。**公開リポジトリを作成するとき、GitHub のライセンステンプレートで「GNU Affero General Public License v3.0」を選んで `LICENSE` を追加してください。** `LICENSE` が存在しない状態のまま一般公開しないでください。
+このリポジトリの生成機プログラムは GNU Affero General Public License version 3.0 (AGPL-3.0) に従って公開します。既存の公開リポジトリにある正式な `LICENSE`（AGPL-3.0）を維持してください。
 
 サードパーティーのライブラリは `THIRD_PARTY_NOTICES.md` を参照してください。ライブラリのライセンスをこのリポジトリのライセンスで上書きすることはできません。
 
@@ -13,6 +13,8 @@
 ## 構成
 
 - `main.py` — FastAPI、HTML、チャート生成、アクセス制限
+- `geonames_lookup.py` — ローカル地名検索（リクエスト時の外部API通信なし）
+- `build_geonames_db.py` — GeoNamesから地名データを取得・SQLite索引を生成
 - `requirements.txt` — Python ライブラリ
 - `Dockerfile` — Cloud Run 用の実行コンテナ
 - `.python-version` / `Procfile` — 開発・起動設定
@@ -32,16 +34,22 @@ python -m uvicorn main:app --host 127.0.0.1 --port 8000
 
 ## 環境変数
 
-- `HOROSCOPE_GEOCODING_ENABLED=0` — 外部地名検索の緊急停止。`1` で有効
 - `HOROSCOPE_SOURCE_URL=https://github.com/OWNER/REPO` — 画面上の対応ソース案内（公開リポジトリの実際のURLに変更）
-- `HOROSCOPE_NOMINATIM_DOMAIN` — 利用するNominatimホスト。既定はOSMF公共サーバー
+- `HOROSCOPE_GEONAMES_DB` — SQLite地名辞書へのパス（省略時: `data/geonames.sqlite3`）
 - `PORT` — Cloud Run が指定する待受ポート
 
-## 公共Nominatim利用上の制限
+## 出生地検索：オフライン GeoNames
 
-現在の検索制限・キャッシュは **プロセス内だけ** に存在し、Cloud Runの再起動・複数リビジョン・一時的な並列インスタンス間で共有されません。これだけでOSMF公共Nominatimの「アプリ全体で最大1リクエスト/秒」を保証できません。一般公開には全体制御、セルフホスト、または条件に適合する代替サービスを検討してください。
+- `build_geonames_db.py` はビルド時に GeoNames の `cities500.zip`、`JP.zip`、`admin1CodesASCII.txt`、`countryInfo.txt` を取得し、SQLite の `data/geonames.sqlite3` を生成します。**ユーザーの地名検索時には外部の地名検索APIを呼びません。**
+- Python のローカル実行前に `python build_geonames_db.py` を一度実行してください（インターネット接続が必要）。Dockerfile ではコンテナのビルド時に自動生成します。
+- GeoNames データは CC BY 4.0。出典・ライセンス表記を維持してください。詳細は `THIRD_PARTY_NOTICES.md`。
+- 収録データにない地名は検索できません。市区町村を省略するか、代替として `緯度,経度`（例 `34.65,134.99`）を入力してください。
+- 入力例：`東京都千代田区`、`兵庫県明石市`、`Paris France`、`New York, USA`。**データ収録状況によるため、デプロイ前に実データでテストしてください。**
+- 同名都市には曖昧さがあるため、地名の選択・表示機能を将来的に追加するのが望ましいです。
+- アプリの位置検索は都市中心座標を使います。出生施設の正確な位置とは限りません。
+- 定期的なデータ更新は、新版のDockerイメージを再ビルドして行ってください。
 
-公共サーバーの利用規約: https://operations.osmfoundation.org/policies/nominatim/
+地名データ配布元：https://download.geonames.org/export/dump/ （CC BY 4.0）
 
 ## セキュリティ
 

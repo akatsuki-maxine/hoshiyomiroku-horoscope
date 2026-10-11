@@ -20,13 +20,13 @@ Copyright (C) Astrodienst AG. Authors: Dieter Koch and Alois Treindl. Distribute
 - https://www.astro.com/swisseph/swephinfo_e.htm
 - https://github.com/aloistr/swisseph/blob/master/LICENSE
 
-## OpenStreetMap / Nominatim
-
-Location searches use OpenStreetMap data, with attribution to © OpenStreetMap contributors. OpenStreetMap data licensing and Nominatim service usage policy are separate requirements.
-- https://www.openstreetmap.org/copyright
-- https://operations.osmfoundation.org/policies/nominatim/
-
 ## Further review
 
 - Confirm any additional third-party software, bundled data and fonts before production release.
 - This notice does not replace any complete upstream license texts legally required for redistribution of upstream code or datasets.
+
+## GeoNames（出生地検索データ）
+
+地名・緯度経度の辞書：GeoNames（https://www.geonames.org/）、CC BY 4.0（https://creativecommons.org/licenses/by/4.0/）。元データ `cities500.zip`, `JP.zip`, `admin1CodesASCII.txt`, `countryInfo.txt`（https://download.geonames.org/export/dump/）を索引化して利用しています。出典表示、ライセンスリンク、変更（SQLite索引への変換）の明示を保持します。
+
+以前の公開準備版にあった公共Nominatimへの地名検索API通信は、この版では削除しました。

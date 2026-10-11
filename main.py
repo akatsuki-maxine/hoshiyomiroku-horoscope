@@ -6,7 +6,6 @@
 import base64
 from collections import deque
 from datetime import datetime
-from functools import lru_cache
 from threading import Lock
 import os
 import time
@@ -18,14 +17,12 @@ from typing import Annotated, Optional
 
 from fastapi import FastAPI, File, Form, UploadFile, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse
-from geopy.exc import GeocoderServiceError, GeocoderTimedOut
-from geopy.geocoders import Nominatim
-from geopy.extra.rate_limiter import RateLimiter
 from kerykeion import AstrologicalSubjectFactory
 from kerykeion.chart_data_factory import ChartDataFactory
 from kerykeion.charts.chart_drawer import ChartDrawer
 from kerykeion.planetary_return_factory import PlanetaryReturnFactory
 from timezonefinder import TimezoneFinder
+from geonames_lookup import lookup_place
 
 
 app = FastAPI(title="神格反転ホロスコープ生成機")
@@ -65,49 +62,8 @@ async def protect_generation(request: Request, call_next):
     return response
 
 
-# 公共Nominatimの利用制限を守るため、1インスタンス内で地名検索を1.2秒間隔にする。
-# 利用者が増えたら公共APIに依存せず、規約上適切な提供元へ切り替える。
-geolocator = Nominatim(
-    user_agent="shinkaku-hanten-horoscope-web/1.0 (+https://divine-inversion.com/)",
-    domain=os.environ.get("HOROSCOPE_NOMINATIM_DOMAIN", "nominatim.openstreetmap.org"),
-    timeout=10,
-)
-# 公共Nominatimの利用は「低トラフィック向けの暫定運用」です。
-# Webサービス全体で毎秒1回以下が条件。プロセス単位の制限だけでは、
-# Cloud Runの一時的な増設や複数リビジョンをまたぐ絶対保証にはなりません。
-# 規約・利用量に不安があれば環境変数 HOROSCOPE_GEOCODING_ENABLED=0 で即時停止可能。
-_limited_geocode = RateLimiter(
-    geolocator.geocode,
-    min_delay_seconds=1.7,
-    max_retries=0,
-    swallow_exceptions=False,
-)
-_GEO_LOOKUP_MAX_PER_MINUTE = 12
-_GEO_LOOKUP_MAX_PER_HOUR = 80
-_geo_lookups = deque()
-_geo_lock = Lock()
-
-
-def _remote_geocode(place_name: str):
-    if os.environ.get("HOROSCOPE_GEOCODING_ENABLED", "1") != "1":
-        raise ValueError("現在、出生地の新規検索を一時停止しています。")
-    now = time.monotonic()
-    with _geo_lock:
-        while _geo_lookups and now - _geo_lookups[0] >= 3600:
-            _geo_lookups.popleft()
-        calls_in_last_minute = sum(now - tick < 60 for tick in _geo_lookups)
-        if (calls_in_last_minute >= _GEO_LOOKUP_MAX_PER_MINUTE
-                or len(_geo_lookups) >= _GEO_LOOKUP_MAX_PER_HOUR):
-            raise ValueError("出生地検索が混雑しています。時間をおいて再試行してください。")
-        _geo_lookups.append(now)
-    return _limited_geocode(place_name, language="ja", exactly_one=True)
-
-
-@lru_cache(maxsize=1024)
-def _cached_geocode(place_name: str):
-    return _remote_geocode(place_name)
-
-
+# 地名検索はビルド済み GeoNames SQLite 辞書のみを利用する。
+# 入力文字列を外部のジオコーディングサービスに送信しない。
 timezone_finder = TimezoneFinder()
 
 
@@ -320,15 +276,9 @@ def search_birthplace(place_name: str):
     normalized_place = " ".join(place_name.strip().split())
     if not 1 <= len(normalized_place) <= 120:
         raise ValueError("出生地・観測地点は120文字以内で入力してください。")
-    location = _cached_geocode(normalized_place)
-
-    if location is None:
-        raise ValueError(
-            "出生地を特定できませんでした。都道府県名や国名を加えてください。"
-        )
-
-    latitude = float(location.latitude)
-    longitude = float(location.longitude)
+    location = lookup_place(normalized_place)
+    latitude = float(location["latitude"])
+    longitude = float(location["longitude"])
     timezone = timezone_finder.timezone_at(
         lng=longitude,
         lat=latitude,
@@ -340,7 +290,7 @@ def search_birthplace(place_name: str):
         )
 
     return {
-        "display_name": location.address,
+        "display_name": location["display_name"],
         "latitude": latitude,
         "longitude": longitude,
         "timezone": timezone,
@@ -1454,8 +1404,8 @@ FORM_HTML = """
         </form>
         <p class="notice">
             入力した場所から緯度・経度・タイムゾーンを自動取得します。<br>
-            出生地の文字列はOpenStreetMap Nominatimの検索サービスに送信されます。番地や個人の住所は入力しないでください。<br>
-            検索データ：<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a> / <a href="https://operations.osmfoundation.org/policies/nominatim/" target="_blank" rel="noopener noreferrer">Nominatimの利用規約</a>
+            地名検索はGeoNamesのローカル辞書で実行し、地名を外部検索APIへ送信しません。番地などの詳細住所は入力しないでください。<br>
+            地名データ：<a href="https://www.geonames.org/" target="_blank" rel="noopener noreferrer">GeoNames</a>（<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>）。データはローカル検索用に索引化しています。
         </p>
     </main>
 
@@ -1668,7 +1618,7 @@ def generate_chart(
             solar_return_latitude = solar_return_location_data["latitude"]
             solar_return_longitude = solar_return_location_data["longitude"]
             solar_return_timezone = solar_return_location_data["timezone"]
-    except (ValueError, GeocoderTimedOut, GeocoderServiceError) as error:
+    except ValueError as error:
         return HTMLResponse(
             content=f"""
             <!DOCTYPE html>

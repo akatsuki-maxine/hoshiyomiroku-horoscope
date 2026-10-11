@@ -1,0 +1,30 @@
+# Local virtual environments, caches and secrets
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*service-account*.json
+*credentials*.json
+.DS_Store
+.idea/
+.vscode/
+# private inputs and generated outputs
+*.backup
+requirements-local.txt
+*.svg
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.zip
+# generated chart/PII data should remain local
+private/
+exports/
+charts/
